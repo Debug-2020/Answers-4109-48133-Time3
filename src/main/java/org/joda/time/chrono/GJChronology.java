@@ -67,7 +67,7 @@ import org.joda.time.format.ISODateTimeFormat;
  * {@link GregorianChronology}.
  * <p>
  * GJChronology is thread-safe and immutable.
- *
+ * 
  * @author Brian S O'Neill
  * @author Stephen Colebourne
  * @since 1.0
@@ -170,10 +170,10 @@ public final class GJChronology extends AssembledChronology {
     public static GJChronology getInstance(
             DateTimeZone zone,
             ReadableInstant gregorianCutover) {
-
+        
         return getInstance(zone, gregorianCutover, 4);
     }
-
+    
     /**
      * Factory method returns instances of the GJ cutover chronology. Any
      * cutover date may be specified.
@@ -186,13 +186,17 @@ public final class GJChronology extends AssembledChronology {
             DateTimeZone zone,
             ReadableInstant gregorianCutover,
             int minDaysInFirstWeek) {
-
+        
         zone = DateTimeUtils.getZone(zone);
         Instant cutoverInstant;
         if (gregorianCutover == null) {
             cutoverInstant = DEFAULT_CUTOVER;
         } else {
             cutoverInstant = gregorianCutover.toInstant();
+            LocalDate cutoverDate = new LocalDate(cutoverInstant.getMillis(), GregorianChronology.getInstance(zone));
+            if (cutoverDate.getYear() <= 0) {
+                throw new IllegalArgumentException("Cutover too early. Must be on or after 0001-01-01.");
+            }
         }
 
         GJChronology chrono;
@@ -206,7 +210,7 @@ public final class GJChronology extends AssembledChronology {
                     chrono = chronos.get(i);
                     if (minDaysInFirstWeek == chrono.getMinimumDaysInFirstWeek() &&
                         cutoverInstant.equals(chrono.getGregorianCutover())) {
-
+                        
                         return chrono;
                     }
                 }
@@ -241,7 +245,7 @@ public final class GJChronology extends AssembledChronology {
             DateTimeZone zone,
             long gregorianCutover,
             int minDaysInFirstWeek) {
-
+        
         Instant cutoverInstant;
         if (gregorianCutover == DEFAULT_CUTOVER.getMillis()) {
             cutoverInstant = null;
@@ -299,7 +303,7 @@ public final class GJChronology extends AssembledChronology {
     //-----------------------------------------------------------------------
     /**
      * Gets the Chronology in the UTC time zone.
-     *
+     * 
      * @return the chronology in UTC
      */
     public Chronology withUTC() {
@@ -308,7 +312,7 @@ public final class GJChronology extends AssembledChronology {
 
     /**
      * Gets the Chronology in a specific time zone.
-     *
+     * 
      * @param zone  the zone to get the chronology in, null is default
      * @return the chronology
      */
@@ -398,7 +402,7 @@ public final class GJChronology extends AssembledChronology {
 
     /**
      * Gets the minimum days needed for a week to be the first week in a year.
-     *
+     * 
      * @return the minimum days
      */
     public int getMinimumDaysInFirstWeek() {
@@ -408,7 +412,7 @@ public final class GJChronology extends AssembledChronology {
     //-----------------------------------------------------------------------
     /**
      * Checks if this chronology instance equals another.
-     *
+     * 
      * @param obj  the object to compare to
      * @return true if equal
      * @since 1.6
@@ -428,7 +432,7 @@ public final class GJChronology extends AssembledChronology {
 
     /**
      * A suitable hash code for the chronology.
-     *
+     * 
      * @return the hash code
      * @since 1.6
      */
@@ -441,7 +445,7 @@ public final class GJChronology extends AssembledChronology {
     //-----------------------------------------------------------------------
     /**
      * Gets a debugging toString.
-     *
+     * 
      * @return a debugging string
      */
     public String toString() {
@@ -449,7 +453,7 @@ public final class GJChronology extends AssembledChronology {
         sb.append("GJChronology");
         sb.append('[');
         sb.append(getZone().getID());
-
+        
         if (iCutoverMillis != DEFAULT_CUTOVER.getMillis()) {
             sb.append(",cutover=");
             DateTimeFormatter printer;
@@ -460,13 +464,13 @@ public final class GJChronology extends AssembledChronology {
             }
             printer.withChronology(withUTC()).printTo(sb, iCutoverMillis);
         }
-
+        
         if (getMinimumDaysInFirstWeek() != 4) {
             sb.append(",mdfw=");
             sb.append(getMinimumDaysInFirstWeek());
         }
         sb.append(']');
-
+        
         return sb.toString();
     }
 
@@ -498,7 +502,7 @@ public final class GJChronology extends AssembledChronology {
         // First just copy all the Gregorian fields and then override those
         // that need special attention.
         fields.copyFieldsFrom(gregorian);
-
+        
         // Assuming cutover is at midnight, all time of day fields can be
         // gregorian since they are unaffected by cutover.
 
@@ -554,15 +558,15 @@ public final class GJChronology extends AssembledChronology {
                 julian.yearOfEra(), fields.yearOfEra, fields.years, iCutoverMillis);
             fields.yearOfCentury = new ImpreciseCutoverField(
                 julian.yearOfCentury(), fields.yearOfCentury, fields.years, iCutoverMillis);
-
+            
             fields.centuryOfEra = new ImpreciseCutoverField(
                 julian.centuryOfEra(), fields.centuryOfEra, iCutoverMillis);
             fields.centuries = fields.centuryOfEra.getDurationField();
-
+            
             fields.monthOfYear = new ImpreciseCutoverField(
                 julian.monthOfYear(), fields.monthOfYear, iCutoverMillis);
             fields.months = fields.monthOfYear.getDurationField();
-
+            
             fields.weekyear = new ImpreciseCutoverField(
                 julian.weekyear(), fields.weekyear, null, iCutoverMillis, true);
             fields.weekyearOfCentury = new ImpreciseCutoverField(
@@ -976,6 +980,17 @@ public final class GJChronology extends AssembledChronology {
                 if (instant < iCutover) {
                     // Only adjust if gap fully crossed.
                     if (instant + iGapDuration < iCutover) {
+                        if (iConvertByWeekyear) {
+                            int wyear = iGregorianChronology.weekyear().get(instant);
+                            if (wyear <= 0) {
+                                instant = iGregorianChronology.weekyear().add(instant, -1);
+                            }
+                        } else {
+                            int year = iGregorianChronology.year().get(instant);
+                            if (year <= 0) {
+                                instant = iGregorianChronology.year().add(instant, -1);
+                            }
+                        }
                         instant = gregorianToJulian(instant);
                     }
                 }
@@ -991,13 +1006,24 @@ public final class GJChronology extends AssembledChronology {
             }
             return instant;
         }
-
+        
         public long add(long instant, long value) {
             if (instant >= iCutover) {
                 instant = iGregorianField.add(instant, value);
                 if (instant < iCutover) {
                     // Only adjust if gap fully crossed.
                     if (instant + iGapDuration < iCutover) {
+                        if (iConvertByWeekyear) {
+                            int wyear = iGregorianChronology.weekyear().get(instant);
+                            if (wyear <= 0) {
+                                instant = iGregorianChronology.weekyear().add(instant, -1);
+                            }
+                        } else {
+                            int year = iGregorianChronology.year().get(instant);
+                            if (year <= 0) {
+                                instant = iGregorianChronology.year().add(instant, -1);
+                            }
+                        }
                         instant = gregorianToJulian(instant);
                     }
                 }
